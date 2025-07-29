@@ -4,14 +4,13 @@ import type { Options } from '../types'
 /**
  * Get SVGO Options
  */
-export function getOptions(svgoOptions: Options['svgo'], prefix: string) {
-  let svgo: SvgoConfig | false = {
+export function getOptions(svgoOptions: Options['svgo'] | undefined, prefix: string) {
+  let svgo: SvgoConfig | undefined = {
     plugins: [
       {
         name: 'preset-default',
         params: {
           overrides: {
-            removeViewBox: false,
             removeEmptyAttrs: false,
             moveGroupAttrsToElems: false,
             collapseGroups: false,
@@ -23,8 +22,11 @@ export function getOptions(svgoOptions: Options['svgo'], prefix: string) {
       },
     ],
   }
-  if (typeof svgoOptions === 'object' || svgoOptions === false)
+
+  if (typeof svgoOptions === 'object')
     svgo = svgoOptions
+  else if (svgoOptions === false)
+    svgo = undefined
 
   return svgo
 }

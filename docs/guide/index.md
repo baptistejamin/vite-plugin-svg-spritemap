@@ -13,29 +13,25 @@ This ViteJS plugin generates a single SVG [spritemap](https://css-tricks.com/svg
 
 **Requirements**
 
-- Vite 5 or Vite 6
-- Node 18 or Node 20 and superior
+- Vite 7 or Vite 6
+- Node 18 or Node 20 or Node 22 and superior
 
 ::: code-group
 
 ```bash [npm]
 npm i -D @spiriit/vite-plugin-svg-spritemap
-npm i -D svgo #if you need svgo optimization
 ```
 
 ```bash [Yarn]
 yarn add -D @spiriit/vite-plugin-svg-spritemap
-yarn add -D svgo #if you need svgo optimization
 ```
 
 ```bash [pnpm]
 pnpm add -D @spiriit/vite-plugin-svg-spritemap
-pnpm add -D svgo #if you need svgo optimization
 ```
 
 ```bash [Bun]
 bun add -D @spiriit/vite-plugin-svg-spritemap
-bun add -D svgo #if you need svgo optimization
 ```
 
 :::
@@ -85,7 +81,7 @@ Under the hood, the spritemap generates `<view>` tags. This can be disabled by u
 
 ## Advanced usage
 
-This plugin is trying to cover a maxiumum of use cases and usage because ViteJS is very versatile tool.
+This plugin is trying to cover a maximum of use cases and usage because ViteJS is a very versatile tool.
 You can pass, as a second argument, an object with options allowing you to control the svg output.
 
 Check the advanced and [options](/options/) documentations.
