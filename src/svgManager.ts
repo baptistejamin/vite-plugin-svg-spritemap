@@ -1,7 +1,8 @@
 import type { Jobs as OxvgConfig } from '@oxvg/napi'
+import type { Glob } from 'picomatch'
 import type { Config as SvgoConfig } from 'svgo'
 import type { ResolvedConfig } from 'vite'
-import type { Options, Pattern, SvgMapObject } from './types'
+import type { Options, SvgMapObject } from './types'
 import { promises as fs } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { DOMImplementation, DOMParser, XMLSerializer } from '@xmldom/xmldom'
@@ -9,6 +10,7 @@ import hash_sum from 'hash-sum'
 import { glob } from 'tinyglobby'
 import { calculateY } from './helpers/calculateY'
 import { cleanAttributes } from './helpers/cleanAttributes'
+import { log } from './helpers/log'
 import { getOptimize as getOptimiseOxvg, getOptions as getOptionsOxvg } from './helpers/oxvg'
 import { getOptimize as getOptimizeSvgo, getOptions as getOptionsSvgo } from './helpers/svgo'
 import { Styles } from './styles/styles'
@@ -21,13 +23,13 @@ export class SVGManager {
   private _parser: DOMParser
   private _ids: Set<string>
   private _svgs: Map<string, SvgMapObject>
-  private _iconsPattern: Pattern
+  private _iconsPattern: Glob
   private _config: ResolvedConfig
   public hash: string | null = null
   private _optimizeType: 'svgo' | 'oxvg' | null = null
   private _optimize: Awaited<ReturnType<typeof getOptimizeSvgo | typeof getOptimiseOxvg>> | null = null
 
-  constructor(iconsPattern: Pattern, options: Options, config: ResolvedConfig) {
+  constructor(iconsPattern: Glob, options: Options, config: ResolvedConfig) {
     this._parser = new DOMParser()
     this._options = options
     this._ids = new Set()
@@ -37,19 +39,20 @@ export class SVGManager {
   }
 
   /**
-   * Update a single SVG file in the sprite map
+   * Update a single SVG file in the spritemap
+   * @param filePath - The path of the SVG file to update
+   * @param mode - The mode of operation, either 'create' or 'update' (default: 'create')
+   * @param loop - Whether this update is part of a bulk update (to optimize performance)
+   * @returns True if the SVG file was updated, false otherwise
    */
-  async update(filePath: string, loop = false) {
+  async update(filePath: string, mode: 'create' | 'update' = 'create', loop = false): Promise<boolean> {
     const name = basename(filePath, '.svg')
-    if (!name)
-      return false
-
     let svg: string
     try {
       svg = await fs.readFile(filePath, 'utf8')
     }
     catch (error) {
-      this._config.logger.error(`[vite-plugin-svg-spritemap] Failed to read file '${filePath}': ${error}`)
+      log({ level: 'error', message: `Failed to read file '${filePath}': ${error}`, logger: this._config.logger })
       return false
     }
 
@@ -73,8 +76,8 @@ export class SVGManager {
 
     const id = this._options.idify(name, svgData)
 
-    if (this._ids.has(id)) {
-      this._config.logger.warn(`[vite-plugin-svg-spritemap] Sprite '${filePath}' has the same id (${id}) as another sprite.`)
+    if (this._ids.has(id) && mode === 'create') {
+      log({ level: 'warn', message: `Sprite '${filePath}' has the same id (${id}) as another sprite.`, logger: this._config.logger })
     }
 
     this._ids.add(id)
@@ -93,7 +96,30 @@ export class SVGManager {
   }
 
   /**
+   * Remove a single SVG file from the spritemap
+   * @param filePath - The path of the SVG file to remove
+   * @returns True if the SVG file was removed, false if it was not found
+   */
+  async delete(filePath: string): Promise<boolean> {
+    if (!this._svgs.has(filePath))
+      return false
+
+    const svg = this._svgs.get(filePath)
+    if (svg)
+      this._ids.delete(svg.id)
+
+    this._svgs.delete(filePath)
+    this.hash = hash_sum(this.spritemap)
+    this._sortSvgs()
+    await this.createFileStyle()
+    return true
+  }
+
+  /**
    * Extract width, height and viewBox from SVG
+   * @param svg - The SVG content as a string
+   * @param filePath - The path of the SVG file (for logging purposes)
+   * @returns An object containing width, height and viewBox (if available)
    */
   private _extractSvgDimensions(svg: string, filePath: string): { width?: number, height?: number, viewBox?: number[] } {
     const document = this._parser.parseFromString(svg, 'image/svg+xml')
@@ -112,7 +138,7 @@ export class SVGManager {
     let height = heightAttr ? Number.parseFloat(heightAttr) : undefined
 
     if (viewBox && viewBox.length !== 4 && (!width || !height)) {
-      this._config.logger.warn(`[vite-plugin-svg-spritemap] Sprite '${filePath}' is invalid, it's lacking both a viewBox and width/height attributes.`)
+      log({ level: 'warn', message: `Sprite '${filePath}' is invalid, it's lacking both a viewBox and width/height attributes.`, logger: this._config.logger })
       return {}
     }
 
@@ -130,6 +156,8 @@ export class SVGManager {
 
   /**
    * Optimize SVG using SVGO or OXVG if available
+   * @param svg - The SVG content as a string
+   * @returns The optimized SVG content as a string
    */
   private async _optimizeSvg(svg: string): Promise<string> {
     if (this._optimize && this._optimizeType) {
@@ -145,7 +173,7 @@ export class SVGManager {
           return optimizedSvg.data
       }
       catch (error) {
-        this._config.logger.warn(`[vite-plugin-svg-spritemap] SVGO optimization failed: ${error}`)
+        log({ level: 'warn', message: `SVGO optimization failed: ${error}`, logger: this._config.logger })
       }
     }
 
@@ -163,11 +191,11 @@ export class SVGManager {
     if (this._options.svgo !== false)
       this._optimize = await getOptimizeSvgo()
     if (this._optimize) {
-      this._config.logger.info(`[vite-plugin-svg-spritemap] Using SVGO for SVG optimization.`)
+      log({ level: 'info', message: `Using SVGO for SVG optimization on ${this._options.route.name}.`, logger: this._config.logger })
       this._optimizeType = 'svgo'
     }
     if (this._options.svgo && !this._optimize) {
-      this._config.logger.warn(`[vite-plugin-svg-spritemap] You need to install SVGO to be able to optimize your SVG with it.`)
+      log({ level: 'warn', message: `You need to install SVGO to be able to optimize your SVG with it.`, logger: this._config.logger })
     }
 
     if (this._optimize)
@@ -176,18 +204,19 @@ export class SVGManager {
     if (this._options.oxvg !== false)
       this._optimize = await getOptimiseOxvg(this._config.logger)
     if (this._optimize) {
-      this._config.logger.info(`[vite-plugin-svg-spritemap] Using OXVG for SVG optimization.`)
+      log({ level: 'info', message: `Using OXVG for SVG optimization on ${this._options.route.name}.`, logger: this._config.logger })
       this._optimizeType = 'oxvg'
     }
     if (this._options.oxvg && !this._optimize) {
-      this._config.logger.warn(`[vite-plugin-svg-spritemap] You need to install OXVG to be able to optimize your SVG with it.`)
+      log({ level: 'warn', message: `You need to install OXVG to be able to optimize your SVG with it.`, logger: this._config.logger })
     }
   }
 
   /**
    * Update all SVG files in the glob pattern
+   * @param mode - The mode of operation, either 'create' or 'update' (default: 'create')
    */
-  async updateAll(): Promise<void> {
+  async updateAll(mode: 'create' | 'update' = 'create'): Promise<void> {
     const iconsPath = await glob(this._iconsPattern, {
       cwd: this._config.root,
       absolute: true,
@@ -198,7 +227,7 @@ export class SVGManager {
 
     // Process files in parallel for better performance
     await Promise.all(
-      iconsPath.map(iconPath => this.update(iconPath, true)),
+      iconsPath.map(iconPath => this.update(iconPath, mode, true)),
     )
     this._sortSvgs()
 
@@ -315,7 +344,7 @@ export class SVGManager {
       await fs.writeFile(path, content, 'utf8')
     }
     catch (error) {
-      this._config.logger.error(`[vite-plugin-svg-spritemap] Failed to create style file: ${error}`)
+      log({ level: 'error', message: `Failed to create style file: ${error}`, logger: this._config.logger })
     }
   }
 
@@ -349,5 +378,22 @@ export class SVGManager {
     for (const [key, value] of entries) {
       this._svgs.set(key, value)
     }
+  }
+
+  /**
+   * Check if an SVG file is already managed
+   * @param filePath - The path of the SVG file to check
+   * @returns True if the SVG file is managed, false otherwise
+   */
+  public has(filePath: string): boolean {
+    return this._svgs.has(filePath)
+  }
+
+  /**
+   * Get the icons glob pattern
+   * @return The icons glob pattern
+   */
+  public get iconsPattern(): Glob {
+    return this._iconsPattern
   }
 }

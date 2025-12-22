@@ -1,6 +1,9 @@
-import type { Options, OptionsStyles, StylesLang, UserOptions } from '../types'
+import type { Options, OptionsRoute, OptionsStyles, StylesLang, UserOptions } from '../types'
 
-export function createOptions(options: UserOptions = {}): Options {
+export function createOptions(options: UserOptions = {}): { options: Options, logs: { warn: string[] } } {
+  const logs: { warn: string[] } = {
+    warn: [],
+  }
   let prefix: Options['prefix'] = 'sprite-'
   if (options.prefix === false)
     prefix = ''
@@ -14,10 +17,7 @@ export function createOptions(options: UserOptions = {}): Options {
 
     if (typeof lang === 'undefined' || !stylesLang.includes(lang)) {
       lang = 'css'
-      console.warn(
-        '[vite-plugin-spritemap]',
-        'Invalid styles lang, fallback to css',
-      )
+      logs.warn.push('Invalid styles lang, fallback to css')
     }
 
     styles = {
@@ -44,10 +44,7 @@ export function createOptions(options: UserOptions = {}): Options {
     let lang = options.styles.filename.split('.').pop() as StylesLang | undefined
     if (typeof lang === 'undefined' || !stylesLang.includes(lang)) {
       lang = 'css'
-      console.warn(
-        '[vite-plugin-spritemap]',
-        'Invalid styles lang, fallback to css',
-      )
+      logs.warn.push('Invalid styles lang, fallback to css')
     }
 
     styles = {
@@ -94,13 +91,27 @@ export function createOptions(options: UserOptions = {}): Options {
   if (typeof options.idify === 'function')
     idify = options.idify
 
-  let route = '__spritemap'
-  if (typeof options.route === 'string')
-    route = options.route
+  const route: OptionsRoute = {
+    url: '/__spritemap',
+    name: 'spritemap',
+  }
+  if (typeof options.route === 'string') {
+    route.url = options.route
+    route.name = route.url.startsWith('/') ? options.route.slice(1) : options.route
+  }
+  else if (typeof options.route === 'object' && options.route.url) {
+    route.url = options.route.url || route.url
+    route.name = options.route.name || (route.url.startsWith('/') ? options.route.url.slice(1) : options.route.url)
+  }
+
+  if (!route.url.startsWith('/')) {
+    logs.warn.push(`Route option ${route.url} should start with a leading slash, automatically added.`)
+    route.url = `/${route.url}`
+  }
 
   const gutter = options.gutter || 0
 
-  return {
+  const finalOptions = {
     svgo: options.svgo,
     oxvg: options.oxvg,
     output,
@@ -111,4 +122,9 @@ export function createOptions(options: UserOptions = {}): Options {
     route,
     gutter,
   } satisfies Options
+
+  return {
+    options: finalOptions,
+    logs,
+  }
 }

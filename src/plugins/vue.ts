@@ -1,56 +1,61 @@
 import type { Plugin, ResolvedConfig } from 'vite'
-import type { Options, Pattern } from '../types'
+import type { Shared } from '../types'
 import { parse } from 'node:path'
-import { SVGManager } from '../svgManager'
+import { log } from '../helpers/log'
 
-export default function VuePlugin(iconsPattern: Pattern, options: Options): Plugin {
-  const filterVueComponent = /\.svg\?(use|view)?$/
-  let svgManager: SVGManager
+export default function CommonPlugin(shared: Shared): Plugin {
   let config: ResolvedConfig
+  const filterVueComponent = /\.svg\?(use|view)?$/
 
-  return <Plugin>{
+  return {
     name: 'vite-plugin-svg-spritemap:vue',
     enforce: 'pre',
+    apply(config) {
+      return config.plugins?.findIndex(plugin => plugin && 'name' in plugin && plugin.name === 'vite:vue') !== -1
+    },
     configResolved(_config) {
       config = _config
-      if (config.plugins.findIndex(plugin => plugin.name === 'vite:vue') === -1 || !options.output)
-        return
-      svgManager = new SVGManager(iconsPattern, options, config)
-      svgManager.updateAll()
     },
-    async load(id) {
-      if (config.plugins.findIndex(plugin => plugin.name === 'vite:vue') === -1 || !options.output)
-        return
-      if (!id.match(filterVueComponent))
-        return
+    load: {
+      filter: {
+        id: filterVueComponent,
+      },
+      async handler(id) {
+        const { options, svgManager } = shared
+        if (!svgManager || !options.output || !id.match(filterVueComponent))
+          return
 
-      const [path, query] = id.split('?', 2)
-      const { base: filename } = parse(path)
-      const svg = svgManager.svgs.get(path)
+        const [path, query] = id.split('?', 2)
+        const { base: filename } = parse(path)
+        const svg = svgManager.svgs.get(path)
 
-      let source = ''
+        if (!svg)
+          return
 
-      if (query === 'view' && (options.output.view === false || options.output.use === false)) {
-        config.logger.warn(`[vite-plugin-svg-spritemap] You need to enable the output.view and the output.use option to load ${id} as component with the ?view query.`)
-      }
-      else if (query === 'view') {
-        const width = svg?.width ? `width="${Math.ceil(svg.width)}"` : ''
-        const height = svg?.width ? `height="${Math.ceil(svg.height)}"` : ''
-        source = `<img src="/${options.route}#${options.prefix + svg?.id}-view" ${[width, height].filter(item => item.length > 0).join(' ')}/>`
-      }
-      else {
-        source = `<svg><slot/><use xlink:href="/${options.route}#${options.prefix + svg?.id}"></use></svg>`
-      }
+        let source = ''
 
-      const { compileTemplate } = await import('vue/compiler-sfc')
-      const { code } = compileTemplate({
-        id,
-        source,
-        filename,
-        transformAssetUrls: false,
-      })
+        if (query === 'view' && (options.output.view === false || options.output.use === false)) {
+          log({ level: 'warn', message: `You need to enable the output.view and the output.use option to load ${id} as component with the ?view query.`, logger: config.logger })
+        }
+        else if (query === 'view') {
+          const width = svg.width ? `width="${Math.ceil(svg.width)}"` : ''
+          const height = svg.height ? `height="${Math.ceil(svg.height)}"` : ''
+          source = `<img src="${options.route.url}#${options.prefix + svg.id}-view" ${[width, height].filter(item => item.length > 0).join(' ')}/>`
+        }
+        else {
+          source = `<svg><slot/><use xlink:href="${options.route.url}#${options.prefix + svg.id}"></use></svg>`
+        }
 
-      return `${code}\nexport default { render: render }`
+        const { compileTemplate } = await import('vue/compiler-sfc')
+        const { code } = compileTemplate({
+          id,
+          source,
+          filename,
+          transformAssetUrls: false,
+        })
+
+        return `${code}\nexport default { render: render }`
+      },
     },
   }
 }

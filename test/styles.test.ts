@@ -1,6 +1,7 @@
 import type { OptionsStyles, StylesLang } from '../src/types'
 import { promises as fs } from 'node:fs'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { logMessage } from '../src/helpers/log'
 import { buildVite } from './helper/build'
 import { getPath } from './helper/path'
 
@@ -73,7 +74,7 @@ describe('styles generation', () => {
 
   for (const lang in styleIncludes) {
     if (Object.prototype.hasOwnProperty.call(styleIncludes, lang)) {
-      const includes = styleIncludes[lang]
+      const includes = styleIncludes[lang as StylesLang]
       for (const include of includes) {
         it(`include ${lang} ${JSON.stringify(include)}`, async () => {
           const includePath = Array.isArray(include) ? include.join('_') : include
@@ -138,7 +139,7 @@ describe('styles generation', () => {
               return sprite
             })
 
-            content = `/* Route with ${options.route}*/ \n${insert}`
+            content = `/* Route ${options.route.name}*/ \n${insert}`
             return content
           },
         },
@@ -165,11 +166,9 @@ describe('styles generation', () => {
         },
       },
     })
-    for (const call of spy.mock.calls) {
-      expect(call).toStrictEqual([
-        '[vite-plugin-spritemap]',
-        'Invalid styles lang, fallback to css',
-      ])
-    }
+    const call = spy.mock.lastCall
+    expect(call).toStrictEqual([
+      logMessage('Invalid styles lang, fallback to css'),
+    ])
   })
 })

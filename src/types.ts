@@ -1,11 +1,12 @@
 import type { Jobs as OXVGConfig } from '@oxvg/napi'
 import type { Config as SvgoConfig } from 'svgo'
+import type { SVGManager } from './svgManager'
 
 type WithOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
-export type Pattern = string[] | string
-
 export type StylesLang = 'less' | 'scss' | 'styl' | 'css'
+
+export interface Shared { svgManager: SVGManager | null, options: Options }
 
 export interface SvgDataUriMapObject {
   id: string
@@ -67,9 +68,9 @@ export interface UserOptions {
   injectSvgOnDev?: boolean
   /**
    * Change the route allowing multiple instance of the plugin
-   * @default '__spritemap'
+   * @default '/__spritemap'
    */
-  route?: string
+  route?: string | Partial<OptionsRoute>
   /**
    * Gutter (in pixels) between each sprite to help prevent overlap
    * @default 0
@@ -136,11 +137,25 @@ export interface OptionsStyles {
       createSpritemap: (
         generator: (
           svg: SvgDataUriMapObject,
-          isLast: boolean
-        ) => string
+          isLast: boolean,
+        ) => string,
       ) => string
-    }
+    },
   ) => string
+}
+
+export interface OptionsRoute {
+  /**
+   * Route name of the spritemap
+   * @description Used in logging and styles generation
+   * @default 'spritemap'
+   */
+  name: string
+  /**
+   * Route url use to serve the spritemap
+   * @default '/__spritemap'
+   */
+  url: string
 }
 
 interface OptionsStylesNames {
@@ -166,7 +181,7 @@ export interface Options {
   prefix: string
   injectSvgOnDev: boolean
   idify: (name: string, svg: Omit<SvgMapObject, 'id'>) => string
-  route: string
+  route: OptionsRoute
   gutter: number
 }
 
@@ -195,4 +210,8 @@ export interface SvgMapObject {
    * The source code of the svg
    */
   source: string
+}
+
+export interface UserOptionsLogs {
+  warn: string[]
 }
