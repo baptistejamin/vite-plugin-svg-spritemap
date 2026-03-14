@@ -4,7 +4,7 @@ This document provides essential context for AI agents working on this codebase.
 
 ## Project Overview
 
-**vite-plugin-svg-spritemap** is a Vite plugin that generates a single SVG spritemap from multiple SVG files. It creates `<symbol>`, `<view>`, and `<use>` elements for each SVG, enabling efficient icon usage in web applications. The plugin supports Vite 6 and 7.
+**vite-plugin-svg-spritemap** is a Vite plugin that generates a single SVG spritemap from multiple SVG files. It creates `<symbol>`, `<view>`, and `<use>` elements for each SVG, enabling efficient icon usage in web applications. The plugin supports Vite 6, 7 and 8.
 
 ### Key Features
 - Generates a single spritemap file from multiple SVG files
