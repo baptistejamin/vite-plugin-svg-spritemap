@@ -45,7 +45,7 @@
     "node": "^18.0.0 || ^20.0.0 || >=22.0.0"
   },
   "scripts": {
-    "build": "tsdown",
+    "_build": "tsdown",
     "build:watch": "tsdown --watch",
     "test": "vitest",
     "coverage": "vitest run --coverage",
